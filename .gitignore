@@ -1,0 +1,154 @@
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Rust
+core/target/
+core/**/*.rs.bk
+core/Cargo.lock
+
+# Go
+gateway/bin/
+gateway/*.exe
+gateway/*.dll
+gateway/*.so
+gateway/*.dylib
+gateway/*.test
+gateway/*.out
+gateway/vendor/
+
+# Python
+brain/__pycache__/
+brain/*.py[cod]
+brain/*$py.class
+brain/*.so
+brain/.Python
+brain/build/
+brain/develop-eggs/
+brain/dist/
+brain/downloads/
+brain/eggs/
+brain/.eggs/
+brain/lib/
+brain/lib64/
+brain/parts/
+brain/sdist/
+brain/var/
+brain/wheels/
+brain/*.egg-info/
+brain/.installed.cfg
+brain/*.egg
+brain/.pytest_cache/
+brain/.coverage
+brain/.env
+brain/venv/
+brain/ENV/
+brain/env/
+
+# Node / React
+dashboard/node_modules/
+dashboard/build/
+dashboard/dist/
+dashboard/.cache/
+dashboard/.parcel-cache/
+dashboard/.next/
+dashboard/out/
+dashboard/.nuxt/
+dashboard/.vuepress/dist
+dashboard/.serverless/
+dashboard/.fusebox/
+dashboard/.dynamodb/
+dashboard/.tern-port
+dashboard/npm-debug.log*
+dashboard/yarn-debug.log*
+dashboard/yarn-error.log*
+dashboard/.pnpm-debug.log*
+dashboard/.env.local
+dashboard/.env.*.local
+
+# VS Code Extension
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/dist/
+vscode-extension/*.vsix
+
+# Docker
+.docker/
+
+# Database
+database/*.db
+database/*.sqlite
+database/*.log
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Secrets
+secrets/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# Scan outputs
+scans/
+reports/
+results/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+
+# Compiled files
+*.o
+*.a
+*.lib
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Package files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Security sensitive
+authorization_docs/
+audit_logs/*.log
+*.pcap
+*.cap
+handshakes/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*

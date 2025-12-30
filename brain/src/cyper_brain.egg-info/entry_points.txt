@@ -1,0 +1,2 @@
+[console_scripts]
+cyper = cyper_brain.cli.main:cli
