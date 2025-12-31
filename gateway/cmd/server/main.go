@@ -148,6 +148,26 @@ func main() {
 				reportHandler.GenerateReport,
 			)
 
+			// Scan Authorization (Permission to Scan)
+			protected.POST("/scan-authorizations", scanAuthHandler.SubmitAuthorization)
+			protected.GET("/scan-authorizations", scanAuthHandler.ListAuthorizations)
+			protected.POST("/scan-authorizations/check", scanAuthHandler.CheckTargetAuthorization)
+			protected.POST("/scan-authorizations/:id/verify",
+				rbac.RequireRole(rbac.RoleOwner, rbac.RoleAdmin),
+				scanAuthHandler.VerifyAuthorization,
+			)
+
+			// Emergency Stop (Owner only)
+			protected.POST("/emergency/stop",
+				rbac.RequireRole(rbac.RoleOwner),
+				emergencyHandler.ActivateEmergencyStop,
+			)
+			protected.POST("/emergency/resume",
+				rbac.RequireRole(rbac.RoleOwner),
+				emergencyHandler.DeactivateEmergencyStop,
+			)
+			protected.GET("/emergency/status", emergencyHandler.GetEmergencyStatus)
+
 			// TODO: Add monitoring routes
 		}
 	}
