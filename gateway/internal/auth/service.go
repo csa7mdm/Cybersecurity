@@ -50,33 +50,33 @@ type Claims struct {
 
 // User model
 type User struct {
-	ID               string         `db:"id"`
-	Email            string         `db:"email"`
-	Username         string         `db:"username"`
-	PasswordHash     string         `db:"password_hash"`
-	FullName         sql.NullString `db:"full_name"`
-	OrganizationID   sql.NullString `db:"organization_id"`
-	Role             string         `db:"role"`
-	Features         []byte         `db:"features"`
-	IsActive         bool           `db:"is_active"`
-	TermsAcceptedAt  sql.NullTime   `db:"terms_accepted_at"`
-	TermsVersion     sql.NullString `db:"terms_version"`
-	CreatedAt        time.Time      `db:"created_at"`
-	UpdatedAt        time.Time      `db:"updated_at"`
-	LastLoginAt      sql.NullTime   `db:"last_login_at"`
+	ID              string         `db:"id"`
+	Email           string         `db:"email"`
+	Username        string         `db:"username"`
+	PasswordHash    string         `db:"password_hash"`
+	FullName        sql.NullString `db:"full_name"`
+	OrganizationID  sql.NullString `db:"organization_id"`
+	Role            string         `db:"role"`
+	Features        []byte         `db:"features"`
+	IsActive        bool           `db:"is_active"`
+	TermsAcceptedAt sql.NullTime   `db:"terms_accepted_at"`
+	TermsVersion    sql.NullString `db:"terms_version"`
+	CreatedAt       time.Time      `db:"created_at"`
+	UpdatedAt       time.Time      `db:"updated_at"`
+	LastLoginAt     sql.NullTime   `db:"last_login_at"`
 }
 
 // Session model
 type Session struct {
-	ID             string    `db:"id"`
-	UserID         string    `db:"user_id"`
-	TokenHash      string    `db:"token_hash"`
-	IPAddress      string    `db:"ip_address"`
-	UserAgent      string    `db:"user_agent"`
-	ExpiresAt      time.Time `db:"expires_at"`
+	ID             string       `db:"id"`
+	UserID         string       `db:"user_id"`
+	TokenHash      string       `db:"token_hash"`
+	IPAddress      string       `db:"ip_address"`
+	UserAgent      string       `db:"user_agent"`
+	ExpiresAt      time.Time    `db:"expires_at"`
 	RevokedAt      sql.NullTime `db:"revoked_at"`
-	CreatedAt      time.Time `db:"created_at"`
-	LastActivityAt time.Time `db:"last_activity_at"`
+	CreatedAt      time.Time    `db:"created_at"`
+	LastActivityAt time.Time    `db:"last_activity_at"`
 }
 
 // RegisterRequest payload
@@ -314,8 +314,24 @@ func (s *AuthService) AuthMiddleware() gin.HandlerFunc {
 		// Set user info in context
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
-		c.Set("role", claims.Role)
+		c.Set("user_role", claims.Role) // Legacy role field
 		c.Set("features", claims.Features)
+
+		// If organization is in token, fetch user's role in that organization
+		if claims.OrgID != "" {
+			var orgRole string
+			err := s.db.Get(&orgRole, `
+				SELECT role FROM organization_memberships 
+				WHERE user_id = $1 AND organization_id = $2
+			`, claims.UserID, claims.OrgID)
+
+			if err == nil {
+				c.Set("user_role", orgRole) // Override with org-specific role
+				c.Set("organization_id", claims.OrgID)
+			} else if err != sql.ErrNoRows {
+				s.logger.Error("Failed to fetch org role", zap.Error(err))
+			}
+		}
 
 		c.Next()
 	}
@@ -355,7 +371,7 @@ func (s *AuthService) performPulseCheck(ctx context.Context) {
 	for _, session := range sessions {
 		// TODO: Check with central authorization server
 		// For now, just log the pulse check
-		
+
 		_, err = s.db.ExecContext(ctx, `
 			INSERT INTO authorization_pulses (session_id, user_id, status, checked_at, next_check_at)
 			VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '5 minutes')

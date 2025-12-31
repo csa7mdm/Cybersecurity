@@ -12,6 +12,8 @@ import (
 	"github.com/cyper-security/gateway/internal/api"
 	"github.com/cyper-security/gateway/internal/audit"
 	"github.com/cyper-security/gateway/internal/auth"
+	"github.com/cyper-security/gateway/internal/brain"
+	"github.com/cyper-security/gateway/internal/rbac"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
@@ -72,8 +74,10 @@ func main() {
 	}
 
 	centralAuthURL := os.Getenv("CENTRAL_AUTH_SERVER_URL")
+	brainURL := getEnv("BRAIN_URL", "http://brain:50051")
 	pulseInterval := 5 * time.Minute
 
+	brainClient := brain.NewClient(brainURL, logger)
 	authService := auth.NewAuthService(db, redisClient, jwtSecret, centralAuthURL, pulseInterval, logger)
 	auditLogger := audit.NewAuditLogger(db, logger)
 
@@ -101,6 +105,8 @@ func main() {
 	v1 := router.Group("/v1")
 	{
 		authHandler := api.NewAuthHandler(authService, auditLogger)
+		reportHandler := api.NewReportHandler(brainClient, logger)
+		orgHandler := api.NewOrganizationHandler(db, logger)
 
 		// Public routes
 		auth := v1.Group("/auth")
@@ -117,8 +123,29 @@ func main() {
 			protected.POST("/auth/logout", authHandler.Logout)
 			protected.GET("/auth/pulse", authHandler.AuthPulse)
 
-			// TODO: Add scan routes
-			// TODO: Add report routes
+			// Organization management
+			protected.POST("/organizations", orgHandler.CreateOrganization)
+			protected.GET("/organizations", orgHandler.ListOrganizations)
+			protected.GET("/organizations/:id", orgHandler.GetOrganization)
+
+			// Organization invites (requires permission)
+			protected.POST("/organizations/:id/invite",
+				rbac.RequirePermission(rbac.PermInviteUsers, logger),
+				orgHandler.InviteUser,
+			)
+
+			// Scan routes (require permissions)
+			protected.POST("/scans",
+				rbac.RequirePermission(rbac.PermCreateScan, logger),
+				// TODO: scan handler
+			)
+
+			// Report generation (requires permission)
+			protected.POST("/scans/:id/report",
+				rbac.RequirePermission(rbac.PermGenerateReport, logger),
+				reportHandler.GenerateReport,
+			)
+
 			// TODO: Add monitoring routes
 		}
 	}

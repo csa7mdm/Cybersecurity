@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Technical Analysis</h2>
+
+{% for finding in findings %}
+<div style="margin-bottom: 40px; page-break-inside: avoid;">
+    <h3>{{ loop.index }}. {{ finding.name }}</h3>
+
+    <div class="meta-info">
+        <div class="meta-row">
+            <span class="meta-label">Severity:</span>
+            <span class="risk-{{ finding.severity|lower }}">{{ finding.severity }}</span>
+        </div>
+        {% if finding.cve %}
+        <div class="meta-row">
+            <span class="meta-label">CVE:</span>
+            <span>{{ finding.cve }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <h4>Observation</h4>
+    <p>{{ finding.details }}</p>
+
+    {% if finding.evidence %}
+    <h4>Evidence</h4>
+    <pre>{{ finding.evidence }}</pre>
+    {% endif %}
+
+    <h4>Remediation Steps</h4>
+    <div style="background-color: #e8f6f3; padding: 15px; border-radius: 5px; border-left: 4px solid #1abc9c;">
+        <p>{{ finding.remediation }}</p>
+    </div>
+</div>
+{% endfor %}
+
+<h2>Scan Methodology</h2>
+<p>The scan was conducted using the Cypersecurity Autonomous Agent, utilizing the following modules:</p>
+<ul>
+    <li>Port Scanning (Rust Core)</li>
+    <li>Protocol Analysis</li>
+    <li>AI-driven Vulnerability Assessment</li>
+</ul>
+{% endblock %}

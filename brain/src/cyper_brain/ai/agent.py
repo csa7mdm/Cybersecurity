@@ -6,6 +6,7 @@ from openai import OpenAI
 
 from .scan_planner import ScanPlanner, ScanPlan
 from .results_analyzer import ResultsAnalyzer, AnalysisResult
+from ..reporting.generator import ReportGenerator
 
 
 class CyperAI:
@@ -25,6 +26,7 @@ class CyperAI:
         # Sub-modules
         self.scan_planner = ScanPlanner(api_key=self.api_key)
         self.results_analyzer = ResultsAnalyzer(api_key=self.api_key)
+        self.report_generator = ReportGenerator()
 
     async def analyze_target(
         self,
@@ -226,3 +228,46 @@ Provide a clear, accurate answer with relevant security best practices."""
         )
         
         return message.content[0].text
+
+    def generate_formatted_report(
+        self,
+        analysis: AnalysisResult,
+        scan_metadata: Dict[str, Any],
+        output_path: str
+    ) -> str:
+        """
+        Generate a professional PDF report from analysis results.
+        
+        Args:
+            analysis: The AI analysis result
+            scan_metadata: Context info (target_ip, scan_id, etc.)
+            output_path: Where to save the PDF
+            
+        Returns:
+            Path to the generated PDF
+        """
+        # Convert AnalysisResult using vars() or dict comprehension since it's a dataclass
+        # note: asdict needs dataclasses import
+        from dataclasses import asdict
+        
+        data = asdict(analysis)
+        
+        # Merge with metadata
+        data.update(scan_metadata)
+        
+        # Ensure 'findings' is populated for the template
+        # The template expects 'findings' list with 'name', 'severity', 'description'
+        if "findings" not in data:
+            # Re-map from critical_vulnerabilities if needed
+            findings = []
+            for vuln in data.get("critical_vulnerabilities", []):
+                findings.append({
+                    "name": vuln.get("description", "Unknown Vulnerability"),
+                    "severity": vuln.get("severity", "High"),
+                    "description": vuln.get("description"),
+                    "details": "Detected during automated scan.",
+                    "remediation": "Please patch immediately." # Placeholder - AI should provide this
+                })
+            data["findings"] = findings
+
+        return self.report_generator.generate_pdf(data, output_path)

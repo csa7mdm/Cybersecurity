@@ -16,6 +16,7 @@ core/Cargo.lock
 
 # Go
 gateway/bin/
+gateway/cyper-gateway
 gateway/*.exe
 gateway/*.dll
 gateway/*.so
@@ -26,6 +27,8 @@ gateway/vendor/
 
 # Python
 brain/__pycache__/
+brain/**/__pycache__/
+brain/**/*.egg-info/
 brain/*.py[cod]
 brain/*$py.class
 brain/*.so
