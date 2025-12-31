@@ -187,6 +187,10 @@ See [k8s/README.md](k8s/README.md) for detailed deployment guide.
 - Professional reporting engine
 - Cryptographic audit trails
 - **Nmap Scanner Integration** (18 tests, TDD approach)
+- **Stripe Billing System** (15 tests, subscription management)
+- **Email Notifications** (12 tests, user engagement)
+- **OWASP ZAP Scanner** (14 tests, web vulnerabilities)
+- **CVE/NVD Intelligence** (12 tests, threat enrichment)
 
 **In Progress** 🔄:
 - OWASP ZAP integration (web vulnerability scanning)
