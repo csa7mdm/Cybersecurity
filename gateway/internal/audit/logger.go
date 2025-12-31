@@ -13,12 +13,19 @@ import (
 type AuditLogger struct {
 	db     *sqlx.DB
 	logger *zap.Logger
+	signer *AuditSigner // Cryptographic signer for audit logs
 }
 
 func NewAuditLogger(db *sqlx.DB, logger *zap.Logger) *AuditLogger {
+	signer, err := NewAuditSigner(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize audit signer", zap.Error(err))
+	}
+
 	return &AuditLogger{
 		db:     db,
 		logger: logger,
+		signer: signer,
 	}
 }
 
@@ -38,6 +45,9 @@ type AuditLog struct {
 	ErrorMessage       *string         `db:"error_message"`
 	Severity           string          `db:"severity"`
 	Timestamp          time.Time       `db:"timestamp"`
+	Signature          *string         `db:"signature"`
+	SignerPublicKey    *string         `db:"signer_public_key"`
+	SignedAt           *time.Time      `db:"signed_at"`
 }
 
 type LogParams struct {
@@ -91,7 +101,8 @@ func (a *AuditLogger) Log(ctx context.Context, params LogParams) error {
 		)
 	`
 
-	_, err = a.db.ExecContext(ctx, query,
+	var logID int64
+	err = a.db.QueryRowContext(ctx, query+` RETURNING id`,
 		params.UserID,
 		params.SessionID,
 		params.Action,
@@ -105,14 +116,18 @@ func (a *AuditLogger) Log(ctx context.Context, params LogParams) error {
 		params.Status,
 		params.ErrorMessage,
 		params.Severity,
-	)
+	).Scan(&logID)
 
 	if err != nil {
 		a.logger.Error("Failed to create audit log", zap.Error(err))
 		return fmt.Errorf("failed to create audit log: %w", err)
 	}
 
+	// Sign the audit log asynchronously (don't block on signing)
+	go a.signAuditLog(ctx, logID, params)
+
 	a.logger.Debug("Audit log created",
+		zap.Int64("log_id", logID),
 		zap.String("action", params.Action),
 		zap.String("user_id", params.UserID),
 		zap.String("status", params.Status),
@@ -120,6 +135,59 @@ func (a *AuditLogger) Log(ctx context.Context, params LogParams) error {
 	)
 
 	return nil
+}
+
+// signAuditLog signs an audit log entry (called asynchronously)
+func (a *AuditLogger) signAuditLog(ctx context.Context, logID int64, params LogParams) {
+	// Fetch the complete log from DB to ensure we sign what's actually stored
+	var log AuditLog
+	err := a.db.GetContext(ctx, &log, "SELECT * FROM audit_logs WHERE id = $1", logID)
+	if err != nil {
+		a.logger.Error("Failed to fetch log for signing", zap.Error(err), zap.Int64("log_id", logID))
+		return
+	}
+
+	// Create signable version
+	signableLog := &SignableAuditLog{
+		ID:           log.ID,
+		UserID:       stringOrEmpty(log.UserID),
+		Action:       log.Action,
+		ResourceType: stringOrEmpty(log.ResourceType),
+		ResourceID:   stringOrEmpty(log.ResourceID),
+		Target:       stringOrEmpty(log.Target),
+		Status:       log.Status,
+		IPAddress:    stringOrEmpty(log.IPAddress),
+		Timestamp:    log.Timestamp,
+	}
+
+	// Sign the log
+	signature, err := a.signer.SignLog(signableLog)
+	if err != nil {
+		a.logger.Error("Failed to sign audit log", zap.Error(err), zap.Int64("log_id", logID))
+		return
+	}
+
+	// Update log with signature
+	_, err = a.db.ExecContext(ctx, `
+		UPDATE audit_logs 
+		SET signature = $1, signer_public_key = $2, signed_at = NOW()
+		WHERE id = $3
+	`, signature, a.signer.GetPublicKey(), logID)
+
+	if err != nil {
+		a.logger.Error("Failed to save audit log signature", zap.Error(err), zap.Int64("log_id", logID))
+		return
+	}
+
+	a.logger.Debug("Audit log signed", zap.Int64("log_id", logID))
+}
+
+// Helper function
+func stringOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // LogAction is a helper for common logging patterns
