@@ -7,15 +7,16 @@ Tests complete user workflows using Playwright.
 import pytest
 from playwright.sync_api import Page, expect
 import time
+import re
 
 
 class TestUserOnboarding:
     """Test complete user onboarding flow"""
     
-    def test_signup_and_verification(self, page: Page):
+    def test_signup_and_verification(self, page: Page, frontend_base_url):
         """Test user can sign up and verify email"""
         # Navigate to signup page
-        page.goto("http://localhost:3000/signup")
+        page.goto(f"{frontend_base_url}/signup")
         
         # Fill signup form
         page.fill('input[name="email"]', "test@example.com")
@@ -33,10 +34,10 @@ class TestUserOnboarding:
         # verification_url = get_verification_link_from_email()
         # page.goto(verification_url)
     
-    def test_onboarding_wizard(self, page: Page):
+    def test_onboarding_wizard(self, authenticated_page: Page, frontend_base_url):
         """Test 4-step onboarding wizard"""
-        # Assume user is logged in
-        page.goto("http://localhost:3000/onboarding")
+        # User is already logged in via fixture
+        authenticated_page.goto(f"{frontend_base_url}/onboarding")
         
         # Step 1: Welcome
         expect(page.locator('h1:has-text("Welcome")')).to_be_visible()
@@ -57,17 +58,17 @@ class TestUserOnboarding:
         page.click('button:has-text("Activate Trial")')
         
         # Should redirect to dashboard
-        expect(page).to_have_url(/.*dashboard/)
+        expect(page).to_have_url(re.compile(r".*dashboard"))
         expect(page.locator('text=14-day trial')).to_be_visible()
 
 
 class TestScanWorkflow:
     """Test complete scan workflow"""
     
-    def test_create_and_run_nmap_scan(self, page: Page):
+    def test_create_and_run_nmap_scan(self, authenticated_page: Page, frontend_base_url):
         """Test creating and running Nmap scan"""
         # Navigate to dashboard
-        page.goto("http://localhost:3000/dashboard")
+        authenticated_page.goto(f"{frontend_base_url}/dashboard")
         
         # Click New Scan
         page.click('button:has-text("New Scan")')
