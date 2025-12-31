@@ -1,0 +1,233 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Python Brain Service Tests
+  test-brain:
+    name: Test Brain Service
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      working-directory: ./brain
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run linting
+      working-directory: ./brain
+      run: |
+        pip install ruff
+        ruff check src/ tests/
+    
+    - name: Run type checking
+      working-directory: ./brain
+      run: |
+        pip install mypy
+        mypy src/
+    
+    - name: Run tests with coverage
+      working-directory: ./brain
+      run: |
+        pytest tests/ \
+          --cov=cyper_brain \
+          --cov-report=xml \
+          --cov-report=term \
+          -v
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./brain/coverage.xml
+        flags: brain
+        name: brain-coverage
+
+  # Go Gateway Tests
+  test-gateway:
+    name: Test Gateway Service
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install dependencies
+      working-directory: ./gateway
+      run: go mod download
+    
+    - name: Run linting
+      working-directory: ./gateway
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        golangci-lint run ./...
+    
+    - name: Run tests
+      working-directory: ./gateway
+      run: |
+        go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./gateway/coverage.out
+        flags: gateway
+        name: gateway-coverage
+
+  # Security Scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Python dependency check
+      working-directory: ./brain
+      run: |
+        pip install safety
+        safety check --json
+
+  # Build Docker Images
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-brain, test-gateway]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Brain image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./brain
+        push: false
+        tags: cypersecurity/brain:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build Gateway image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./gateway
+        push: false
+        tags: cypersecurity/gateway:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # E2E Tests (only on main)
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Playwright
+      run: |
+        pip install playwright pytest-playwright
+        playwright install chromium
+    
+    - name: Start services with docker-compose
+      run: |
+        docker-compose up -d
+        sleep 30  # Wait for services to be ready
+    
+    - name: Run E2E tests
+      run: |
+        pytest e2e_tests/ -v --headed
+    
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playwright-screenshots
+        path: e2e_tests/screenshots/
+    
+    - name: Stop services
+      if: always()
+      run: docker-compose down
+
+  # Deploy to Staging (on main branch)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [e2e-tests]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+      url: https://staging.cypersecurity.com
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+    
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f k8s/staging/
+        kubectl rollout status deployment/brain-deployment -n staging
+        kubectl rollout status deployment/gateway-deployment -n staging
+    
+    - name: Run smoke tests
+      run: |
+        curl -f https://staging.cypersecurity.com/health || exit 1
+        echo "Staging deployment successful"
