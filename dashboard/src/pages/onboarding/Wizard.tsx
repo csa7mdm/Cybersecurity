@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui';
+import { Button, Input, Card, CardContent } from '../../components/ui';
 import { Check, ArrowRight, ArrowLeft, Building2, Users, Gift, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 
